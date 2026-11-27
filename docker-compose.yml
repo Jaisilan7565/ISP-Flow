@@ -4,6 +4,10 @@
 #   docker compose up -d --build
 #   open http://localhost:2000       (API docs: http://localhost:2000/api/docs)
 #
+# Fixed project name: containers/network/volumes are always isp-flow-*, no matter which
+# folder (e.g. a Jenkins workspace) compose runs from, so they never clash with other apps.
+name: isp-flow
+
 services:
   db:
     image: postgres:16-alpine
@@ -53,7 +57,9 @@ services:
     depends_on:
       - api
     ports:
-      - "${WEB_PORT:-2000}:80"
+      # Only public port of the whole stack. 2000 is free on the VPS (others use 3000, 3080,
+      # 5000-5004, 5050, 7080, 9081, 18443, 19443 and the *5432 DB ports).
+      - "${WEB_BIND:-0.0.0.0}:${WEB_PORT:-2000}:80"
 
 volumes:
   pgdata:
