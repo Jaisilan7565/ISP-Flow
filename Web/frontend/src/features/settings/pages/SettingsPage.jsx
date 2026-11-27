@@ -1,5 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useSelector } from 'react-redux';
 import { motion } from 'framer-motion';
+import { AlertTriangle, Loader2, Trash2 } from 'lucide-react';
+import { Button } from '../../../components/common/ui';
+import { Modal, Field, inputClass } from '../../../components/common/Overlay';
 import { page, rise } from '../../../utils/motion';
 import { Card, CardTitle } from '../../../components/common/ui';
 import PageHeader from '../../../components/common/PageHeader';
@@ -7,7 +11,7 @@ import { Loading, ErrorBox, NextStep } from '../../../components/common/kit';
 import { FormikForm, TextField, NumberField, FormError } from '../../../components/form/FormKit';
 import { R, MSG, yup, totals100 } from '../../../validation/rules';
 import { useApi, useAction } from '../../../api/hooks';
-import { put } from '../../../api/client';
+import { put, post } from '../../../api/client';
 import { formatCurrency } from '../../../utils/formatters';
 import { shortName } from '../../../utils/names';
 
@@ -40,6 +44,7 @@ const schema = yup.object({
 });
 
 export const SettingsPage = () => {
+  const user = useSelector((s) => s.auth.user);
   const q = useApi('/admin/settings');
   const save = useAction((body) => put('/admin/settings', body));
 
@@ -99,6 +104,74 @@ export const SettingsPage = () => {
           }}
         </FormikForm>
       </motion.div>
+      {user?.role === 'TENANT_ADMIN' && <DangerZone companyName={q.data.company_name} />}
+    </motion.div>
+  );
+};
+
+/* ------------------------------ DANGER ZONE ------------------------------ */
+const WIPED = ['Client orders and every site request (feasibility, surveys)', 'Quotes, sites in delivery and live sites', 'Bills, credit notes, payments received, payouts and ISP bills', 'Uploaded documents and the activity history', 'Record numbers restart (ORD-…-0001, FEAS-…-0001, invoices …)'];
+const KEPT = ['Your company, users and their logins', 'These company settings'];
+
+const ClearDataModal = ({ companyName, onClose }) => {
+  const [form, setForm] = useState({ confirmName: '', password: '', keepMasters: false });
+  const [errors, setErrors] = useState({});
+  const clear = useAction((b) => post('/admin/data/clear', b), { onSuccess: onClose });
+  const nameOk = form.confirmName.trim().toLowerCase() === companyName.trim().toLowerCase();
+  const submit = async (e) => {
+    e.preventDefault();
+    setErrors({});
+    try { await clear.mutateAsync(form); } catch (err) {
+      setErrors(Object.fromEntries((err.errors || []).map((x) => [x.field, x.message])));
+    }
+  };
+  return (
+    <Modal open onClose={onClose} title="Clear all company data" width="max-w-[560px]">
+      <form onSubmit={submit} className="space-y-4">
+        <div className="rounded-xl border border-[#E0566A] bg-[#FDF0F1] p-3.5 text-[13px] text-[#8E1B2C]">
+          <p className="flex items-center gap-1.5 font-semibold"><AlertTriangle className="h-4 w-4" /> This permanently deletes {companyName}'s data. It cannot be undone.</p>
+          <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs">
+            {WIPED.map((x) => <li key={x}>{x}</li>)}
+            {!form.keepMasters && <li>Clients and ISPs / vendors</li>}
+          </ul>
+          <p className="mt-2 text-xs"><b>Kept:</b> {[...KEPT, ...(form.keepMasters ? ['Clients and ISPs / vendors'] : [])].join(' · ')}</p>
+          <p className="mt-2 text-xs">Download any bills or reports you need first. If real invoices were already sent to clients, numbering restarting can clash with them.</p>
+        </div>
+        <label className="flex items-start gap-2 text-[13px] text-ink-2">
+          <input type="checkbox" className="mt-0.5" checked={form.keepMasters} onChange={(e) => setForm((f) => ({ ...f, keepMasters: e.target.checked }))} />
+          <span>Keep clients and ISPs / vendors <span className="block text-[11px] text-muted">Delete only orders and everything after them — useful after a test run or a wrong import</span></span>
+        </label>
+        <Field label={<>Type <b className="text-ink">{companyName}</b> to confirm</>} hint={errors.confirmName}>
+          <input value={form.confirmName} onChange={(e) => setForm((f) => ({ ...f, confirmName: e.target.value }))} className={inputClass} autoComplete="off" />
+        </Field>
+        <Field label="Your password" hint={errors.password}>
+          <input type="password" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} className={inputClass} autoComplete="current-password" />
+        </Field>
+        <div className="flex justify-end gap-2 border-t border-line pt-4">
+          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" disabled={!nameOk || !form.password || clear.isPending} className="bg-[#C0283C]! text-white! shadow-none! hover:bg-[#A11F31]!">
+            {clear.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Delete all data
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+};
+
+const DangerZone = ({ companyName }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <motion.div variants={rise}>
+      <Card className="border border-[#E0566A]/50">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <CardTitle className="text-[#C0283C]">Danger zone</CardTitle>
+            <p className="mt-1 text-xs text-muted">Clear all orders, sites, bills, payments and documents of {companyName} to start fresh — for example after testing or a wrong import. Users and settings are kept. Company Admin only.</p>
+          </div>
+          <Button variant="outline" className="border-[#C0283C]! text-[#C0283C]! hover:bg-[#FDF0F1]!" onClick={() => setOpen(true)}><Trash2 className="h-4 w-4" /> Clear all company data…</Button>
+        </div>
+      </Card>
+      {open && <ClearDataModal companyName={companyName} onClose={() => setOpen(false)} />}
     </motion.div>
   );
 };

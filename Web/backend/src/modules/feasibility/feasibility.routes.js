@@ -121,7 +121,7 @@ router.patch('/:id', requirePerm('feasibility.create'), validate(createSchema.fo
   assertOwner(req, f, 'edit it');
   const b = req.body;
   if (b.customerId) await loadClient(req.tenantId, b.customerId);
-  const map = { clientSiteRef: 'client_site_ref', siteContactName: 'site_contact_name', siteContactPhone: 'site_contact_phone', customerId: 'customer_id', siteName: 'site_name', address: 'address', city: 'city', pincode: 'pincode', mapsUrl: 'maps_url', latitude: 'latitude', longitude: 'longitude', sourceChannel: 'source_channel', rawMessage: 'raw_message', bandwidthMbps: 'bandwidth_mbps', medium: 'medium', requesterName: 'requester_name', requesterPhone: 'requester_phone', linkRole: 'link_role', staticIpCount: 'static_ip_count' };
+  const map = { clientSiteRef: 'client_site_ref', siteContactName: 'site_contact_name', siteContactPhone: 'site_contact_phone', customerId: 'customer_id', siteName: 'site_name', address: 'address', city: 'city', pincode: 'pincode', mapsUrl: 'maps_url', latitude: 'latitude', longitude: 'longitude', sourceChannel: 'source_channel', rawMessage: 'raw_message', notes: 'raw_message', bandwidthMbps: 'bandwidth_mbps', medium: 'medium', requesterName: 'requester_name', requesterPhone: 'requester_phone', linkRole: 'link_role', staticIpCount: 'static_ip_count' };
   if (b.staticIpCount === '' || b.staticIpCount === null) b.staticIpCount = 0;
   const sets = []; const vals = [req.params.id];
   Object.entries(map).forEach(([k, col]) => { if (b[k] !== undefined) { vals.push(b[k] === '' ? null : b[k]); sets.push(`${col} = $${vals.length}`); } });

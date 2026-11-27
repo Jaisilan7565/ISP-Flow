@@ -26,6 +26,8 @@ const siteFields = {
   clientSiteRef: Joi.string().allow('', null).max(64),
   siteContactName: R.optional(R.name(128)),
   siteContactPhone: R.optional(R.phone()),
+  // Anything else about this site (e.g. from an Excel import: camera counts, candidate ISPs) — kept as the site's message
+  notes: Joi.string().allow('', null).max(5000),
   assignedTo: Joi.string().uuid().allow(null, '')
 };
 
@@ -72,7 +74,7 @@ const insertRequest = async (c, ctx, b, assignee) => {
        assigned_to, assigned_at, status, created_by, link_role, static_ip_count)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26) RETURNING id, code`,
     [ctx.tenantId, code, ctx.customer.id, ctx.order?.id || null, b.siteName, b.address, b.city || null, b.pincode || null, latitude, longitude, mapsUrl,
-      ctx.sourceChannel, ctx.order ? null : ctx.rawMessage || null, b.bandwidthMbps, b.medium || 'FIBER', ctx.requesterName || null, ctx.requesterPhone || null,
+      ctx.sourceChannel, b.notes || (ctx.order ? null : ctx.rawMessage) || null, b.bandwidthMbps, b.medium || 'FIBER', ctx.requesterName || null, ctx.requesterPhone || null,
       b.clientSiteRef || null, b.siteContactName || null, b.siteContactPhone || null,
       assignee?.id || null, assignee ? new Date() : null, assignee ? 'ASSIGNED' : 'NEW', ctx.userId, b.linkRole || 'PRIMARY', Number(b.staticIpCount) || 0]
   );

@@ -152,17 +152,12 @@ const addSites = async (c, req, order, customer, sites, assignees, rawMessage) =
   return created;
 };
 
-orders.post('/', requirePerm('orders.create'), validate(Joi.object({
-  ...orderHeader,
-  customerId: Joi.string().uuid().required(),
-  ownerId: Joi.string().uuid().allow(null, ''),
-  sites: sitesSchema
-})), ah(async (req, res) => {
-  const b = req.body;
+/** Create an order with all its sites in one transaction (from the form, or from an Excel import) */
+const createOrder = async (req, b, via = '') => {
   const customer = await loadClient(req.tenantId, b.customerId);
   const owner = await resolveAssignee(req, b.ownerId || null);
   const assignees = await assigneesFor(req, b.sites, owner);
-  const id = await db.tx(async (c) => {
+  return db.tx(async (c) => {
     const code = await nextCode(c, req.tenantId, 'ORD', 'ORD');
     const o = await c.one(
       `INSERT INTO client_orders (tenant_id, code, customer_id, client_ref, received_via, received_date, client_contact_name, client_contact_phone,
@@ -172,12 +167,35 @@ orders.post('/', requirePerm('orders.create'), validate(Joi.object({
         b.clientContactEmail || null, iso(b.expectedBy), b.rawMessage || null, b.notes || null, owner?.id || null, req.user.id]
     );
     await activity.log(c, { tenantId: req.tenantId, userId: req.user.id, entityType: 'ORDER', entityId: o.id, action: 'ORDER_CREATED',
-      message: `${o.code} received from ${customer.name} on ${b.receivedVia}${b.clientRef ? ` (ref ${b.clientRef})` : ''}: ${b.sites.length} site(s)${owner ? `, owner ${owner.name}` : ''}` });
+      message: `${o.code} received from ${customer.name} on ${b.receivedVia}${b.clientRef ? ` (ref ${b.clientRef})` : ''}: ${b.sites.length} site(s)${via}${owner ? `, owner ${owner.name}` : ''}` });
     await addSites(c, req, o, customer, b.sites, assignees, b.rawMessage);
     return o.id;
   });
-  return sendSuccess(res, await orderDetail(req, id), `Order logged — ${b.sites.length} site request(s) created in Feasibility`, 201);
+};
+
+const newOrderSchema = (sites) => Joi.object({
+  ...orderHeader,
+  customerId: Joi.string().uuid().required(),
+  ownerId: Joi.string().uuid().allow(null, ''),
+  sites
+});
+
+orders.post('/', requirePerm('orders.create'), validate(newOrderSchema(sitesSchema)), ah(async (req, res) => {
+  const id = await createOrder(req, req.body);
+  return sendSuccess(res, await orderDetail(req, id), `Order logged — ${req.body.sites.length} site request(s) created in Feasibility`, 201);
 }));
+
+/**
+ * Excel import: one order with up to 2000 sites (rows of the import template), all or nothing.
+ * The web app validates every row first and only sends the rows without errors.
+ */
+const IMPORT_MAX_SITES = 2000;
+orders.post('/import', requirePerm('orders.create'),
+  validate(newOrderSchema(Joi.array().min(1).max(IMPORT_MAX_SITES).items(Joi.object(siteFields)).required())),
+  ah(async (req, res) => {
+    const id = await createOrder(req, req.body, ' (Excel import)');
+    return sendSuccess(res, await orderDetail(req, id), `Imported ${req.body.sites.length} site(s) — created in Feasibility`, 201);
+  }));
 
 /** Add more sites to an existing order (client sends another list later) */
 orders.post('/:id/sites', requirePerm('orders.create'), validate(Joi.object({ sites: sitesSchema })), ah(async (req, res) => {

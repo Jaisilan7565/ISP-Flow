@@ -12,6 +12,8 @@ const app = express();
 app.set('trust proxy', 1);
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'same-site' } }));
 app.use(cors({ origin: env.clientUrl, credentials: true }));
+// Excel imports send up to 2000 sites / ISPs in one request; everything else stays at 1 MB
+app.use(['/api/v1/orders/import', '/api/v1/admin/vendors/import'], express.json({ limit: '10mb' }));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 

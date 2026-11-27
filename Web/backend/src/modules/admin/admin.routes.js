@@ -6,7 +6,10 @@ const Joi = require('joi');
 const { R, guardIds } = require('../../validation/rules');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const db = require('../../config/db');
+const { uploadRoot } = require('../../middlewares/upload.middleware');
 const ApiError = require('../../utils/apiError');
 const { ah, today, parseCoordinates, round2, notFuture, inr } = require('../../utils/helpers');
 const { sendSuccess } = require('../../utils/response');
@@ -378,6 +381,95 @@ router.delete('/vendors/:id', requirePerm('masters.manage'), ah(async (req, res)
     return v.name;
   });
   return sendSuccess(res, { id: req.params.id }, `${name} deleted`);
+}));
+
+/**
+ * Excel import of ISPs / vendors (sheet "ISPs" of the import template). All or nothing.
+ * A name that is already listed (case / spaces ignored) is skipped, never duplicated or overwritten.
+ */
+router.post('/vendors/import', requirePerm('masters.manage'),
+  validate(Joi.object({ vendors: Joi.array().min(1).max(2000).items(vendorSchema).required() })),
+  ah(async (req, res) => {
+    const key = (s) => String(s).trim().replace(/\s+/g, ' ').toLowerCase();
+    const result = await db.tx(async (c) => {
+      const existing = new Set((await c.many('SELECT name FROM vendors WHERE tenant_id = $1', [req.tenantId])).map((v) => key(v.name)));
+      const created = []; const skipped = [];
+      for (const v of req.body.vendors) {
+        if (existing.has(key(v.name))) { skipped.push(v.name); continue; }
+        existing.add(key(v.name));
+        await Vendor.create({ ...withLocation(nulls(v)), tenantId: req.tenantId }, { transaction: c.transaction });
+        created.push(v.name);
+      }
+      if (created.length) {
+        await activity.log(c, { tenantId: req.tenantId, userId: req.user.id, entityType: 'VENDOR', action: 'VENDOR_IMPORTED',
+          message: `${created.length} ISP(s) / vendor(s) imported from Excel${skipped.length ? `; ${skipped.length} already listed` : ''}` });
+      }
+      return { created, skipped };
+    });
+    return sendSuccess(res, result, `${result.created.length} ISP(s) added${result.skipped.length ? `, ${result.skipped.length} already listed` : ''}`, 201);
+  }));
+
+/* ------------------------------ CLEAR ALL DATA ------------------------------ */
+/**
+ * Company Admin only: wipe the company's business data to start fresh (e.g. after testing or a wrong import).
+ * Kept: the company, its users and logins, and company settings. Deleted: orders, feasibility, quotes, sites,
+ * bills, payments, documents (and their files), activity — and, unless keepMasters, clients and ISPs / vendors.
+ * Tables are found from the database itself (every table with a tenant_id), so tables added later are covered too.
+ */
+const KEEP_TABLES = new Set(['tenants', 'users', 'tenant_settings', 'schema_migrations', 'SequelizeMeta']);
+const MASTER_TABLES = new Set(['customers', 'vendors']);
+
+/** Tenant tables in a safe delete order: a table is deleted only after every table that points at it */
+const tenantTablesInDeleteOrder = async (c) => {
+  const tables = (await c.many(
+    `SELECT table_name FROM information_schema.columns
+      WHERE table_schema = current_schema() AND column_name = 'tenant_id'`)).map((r) => r.table_name).filter((t) => !KEEP_TABLES.has(t));
+  const fks = await c.many(
+    `SELECT DISTINCT cl.relname AS child, pr.relname AS parent FROM pg_constraint k
+       JOIN pg_class cl ON cl.oid = k.conrelid JOIN pg_class pr ON pr.oid = k.confrelid
+       JOIN pg_namespace n ON n.oid = cl.relnamespace
+      WHERE k.contype = 'f' AND n.nspname = current_schema() AND cl.relname <> pr.relname`);
+  const order = []; const left = new Set(tables);
+  while (left.size) {
+    // tables no remaining table points at can go now
+    const ready = [...left].filter((t) => !fks.some((f) => f.parent === t && left.has(f.child)));
+    if (!ready.length) throw new Error(`Cannot order tables for deletion (cycle among: ${[...left].join(', ')})`);
+    ready.forEach((t) => { order.push(t); left.delete(t); });
+  }
+  return order;
+};
+
+router.post('/data/clear', validate(Joi.object({
+  confirmName: Joi.string().required(),
+  password: Joi.string().required(),
+  keepMasters: Joi.boolean().default(false)
+})), ah(async (req, res) => {
+  if (req.user.role !== 'TENANT_ADMIN') throw ApiError.forbidden('Only the Company Admin can clear the company data');
+  const tenant = await Tenant.findByPk(req.tenantId, { attributes: ['id', 'name'] });
+  if (req.body.confirmName.trim().toLowerCase() !== tenant.name.trim().toLowerCase()) {
+    throw ApiError.badRequest('Company name does not match', [{ field: 'confirmName', message: `Type ${tenant.name} exactly to confirm` }]);
+  }
+  const me = await User.scope('withPassword').findByPk(req.user.id);
+  if (!(await bcrypt.compare(req.body.password, me.passwordHash))) {
+    throw ApiError.badRequest('Password is incorrect', [{ field: 'password', message: 'Password is incorrect' }]);
+  }
+  const { keepMasters } = req.body;
+  const deleted = await db.tx(async (c) => {
+    const counts = {};
+    for (const t of await tenantTablesInDeleteOrder(c)) {
+      if (keepMasters && MASTER_TABLES.has(t)) continue;
+      // includes "counters", so codes restart at ORD-0001, FEAS-0001 …
+      const r = await c.query(`DELETE FROM "${t}" WHERE tenant_id = $1`, [req.tenantId]);
+      if (r.rowCount) counts[t] = r.rowCount;
+    }
+    await activity.log(c, { tenantId: req.tenantId, userId: req.user.id, entityType: 'SETTINGS', action: 'DATA_CLEARED',
+      message: `All company data cleared by ${me.name}${keepMasters ? ' (clients and ISPs / vendors kept)' : ''}`, meta: { counts } });
+    return counts;
+  });
+  // Uploaded files of the deleted documents
+  await fs.promises.rm(path.join(uploadRoot, req.tenantId), { recursive: true, force: true }).catch(() => {});
+  const total = Object.entries(deleted).filter(([t]) => t !== 'activity_log' && t !== 'counters').reduce((a, [, n]) => a + n, 0);
+  return sendSuccess(res, { deleted }, `Company data cleared — ${total} record(s) deleted`);
 }));
 
 /* -------------------------------- SETTINGS -------------------------------- */

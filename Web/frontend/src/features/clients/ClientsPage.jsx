@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { motion } from 'framer-motion';
-import { Plus, Pencil, Trash2, MessageSquare, ChevronDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, MessageSquare, ChevronDown, FileSpreadsheet } from 'lucide-react';
 import { page, rise } from '../../utils/motion';
 import { Button, Status } from '../../components/common/ui';
 import PageHeader from '../../components/common/PageHeader';
@@ -16,6 +16,8 @@ import { hasPerm } from '../../store/slices/authSlice';
 import { openLifecycle } from '../../store/slices/uiSlice';
 import { formatCurrency, formatMbps, formatDate, todayIso } from '../../utils/formatters';
 import { useFocusRecord, RecordActivity, Code, filterBy, LINK_ROLES, STATIC_IP_OPTIONS, LinkTags, MEDIUMS } from '../shared';
+import { siteShape, siteSchema } from './siteSchema';
+import ImportOrderModal from './ImportOrderModal';
 
 /* ------------------------------- STAGES ------------------------------- */
 export const STAGES = [
@@ -63,25 +65,6 @@ const BLANK_SITE = { siteName: '', bandwidthMbps: '', linkRole: 'PRIMARY', stati
 const SITE_KEYS = Object.keys(BLANK_SITE);
 const pickSite = (v) => Object.fromEntries(SITE_KEYS.map((k) => [k, v[k]]));
 
-/** One site — mirrors the API's siteFields (Joi) */
-const siteShape = {
-  siteName: R.name(255).required(MSG.required),
-  bandwidthMbps: R.int(1, 100000).required(MSG.required),
-  linkRole: R.select(LINK_ROLES.map((x) => x.value)),
-  staticIpCount: R.int(0, 256),
-  address: R.text(1000).required(MSG.required),
-  city: R.text(64),
-  pincode: R.pincode(),
-  medium: R.select(MEDIUMS.map((x) => x.value)),
-  mapsUrl: R.url(),
-  latitude: R.number().min(-90, 'Latitude must be between -90 and 90').max(90, 'Latitude must be between -90 and 90'),
-  longitude: R.number().min(-180, 'Longitude must be between -180 and 180').max(180, 'Longitude must be between -180 and 180'),
-  clientSiteRef: R.text(64),
-  siteContactName: R.name(128),
-  siteContactPhone: R.phone(),
-  assignedTo: yup.string()
-};
-export const siteSchema = yup.object(siteShape);
 
 /** The API reports site errors as "sites.0.address" — show them on the single-site form's own fields */
 const siteErrors = (err) => {
@@ -419,6 +402,7 @@ export const ClientsPage = () => {
   const [q, setQ] = useState('');
   const [mine, setMine] = useState(isEngineer);
   const [newOpen, setNewOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [orderId, setOrderId] = useState(null);
   const [clientId, setClientId] = useState(null);
   const [editClient, setEditClient] = useState(null);
@@ -437,6 +421,7 @@ export const ClientsPage = () => {
         actions={(
           <div className="flex flex-wrap gap-2">
             {hasPerm(user, 'orders.create') && <Button onClick={() => setNewOpen(true)}><Plus className="h-4 w-4" /> New client order</Button>}
+            {hasPerm(user, 'orders.create') && <Button variant="outline" onClick={() => setImportOpen(true)}><FileSpreadsheet className="h-4 w-4" /> Import from Excel</Button>}
             {hasPerm(user, 'masters.manage') && <Button variant="outline" onClick={() => setEditClient({ form: CLIENT })}><Plus className="h-4 w-4" /> Add client</Button>}
           </div>
         )} />
@@ -474,6 +459,7 @@ export const ClientsPage = () => {
       ))}
 
       <NewOrderModal open={newOpen} onClose={() => setNewOpen(false)} onCreated={(id) => { setTab('orders'); setOrderId(id); }} />
+      <ImportOrderModal open={importOpen} onClose={() => setImportOpen(false)} onCreated={(id) => { setTab('orders'); setOrderId(id); }} />
       <OrderDrawer id={orderId} onClose={() => setOrderId(null)} />
       <ClientDrawer id={clientId} onClose={() => setClientId(null)} onOpenOrder={(id) => { setClientId(null); setOrderId(id); }} onEdit={(c) => setEditClient({ id: c.id, form: fromClient(c) })} />
       {editClient && <ClientModal edit={editClient} onClose={() => setEditClient(null)} />}
