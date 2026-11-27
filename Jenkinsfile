@@ -41,14 +41,29 @@ pipeline {
             echo "  sudo chown root:jenkins $ENV_FILE && sudo chmod 640 $ENV_FILE"
             exit 1
           fi
-          cp "$ENV_FILE" .env && chmod 600 .env
+          # Copy, stripping Windows line endings (\\r) and a UTF-8 BOM if the file was edited on Windows
+          sed -e 's/\\r$//' -e '1s/^\\xEF\\xBB\\xBF//' "$ENV_FILE" > .env
+          chmod 600 .env
+
+          # Check required keys exist with a value (prints names only, never secrets)
+          missing=""
+          for key in POSTGRES_PASSWORD JWT_SECRET PLATFORM_OWNER_EMAIL PLATFORM_OWNER_PASSWORD; do
+            grep -Eq "^[[:space:]]*${key}=.+" .env || missing="$missing $key"
+          done
+          if [ -n "$missing" ]; then
+            echo "ERROR: $ENV_FILE is missing a value for:$missing"
+            echo "Keys found in the file:"
+            grep -Eo '^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=' .env | tr -d ' =' || echo "  (none - file is empty or not KEY=value lines)"
+            exit 1
+          fi
+          echo ".env OK"
         '''
       }
     }
 
     stage('Build images') {
       steps {
-        sh 'docker compose build --pull'
+        sh 'docker compose --env-file .env build --pull'
       }
     }
 
@@ -56,7 +71,7 @@ pipeline {
       steps {
         // Recreates only the isp-flow containers whose image/config changed.
         // Volumes (database, uploads) are kept. Never use `down -v` here.
-        sh 'docker compose up -d --remove-orphans'
+        sh 'docker compose --env-file .env up -d --remove-orphans'
       }
     }
 
