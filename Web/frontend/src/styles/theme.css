@@ -1,0 +1,171 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   ISP-FLOW DESIGN SYSTEM — "CALM PRECISION OPERATIONS"
+   Inherited from EduTechLab design specification and adapted for Telecom B2B.
+   See Docs/DESIGN_SYSTEM_AND_ANIMATION_SPEC.md for full token dictionary.
+   ========================================================================== */
+
+:root {
+  /* Neutral surfaces — three stacked layers: canvas ➔ panel ➔ card */
+  --canvas: #E9EBE9;        /* Outer window background */
+  --panel: #F5F6F5;         /* Sidebar, header bar, main content panel */
+  --card: #FDFDFC;          /* Every widget card */
+  --line: #ECEEEC;          /* Hairline borders / dividers */
+  --line-strong: #DADDDB;   /* Outlined buttons, inputs */
+
+  /* Typography */
+  --ink: #111412;           /* Headings, numbers */
+  --ink-2: #3D4540;         /* Body text */
+  --muted: #737B76;         /* Secondary text, nav labels */
+  --subtle: #9AA29D;        /* Captions, axis labels */
+
+  /* Accent scale 1 — Telecom Cobalt (default) */
+  --brand-950: #071326;     /* Dark contour surfaces (hero cards, NOC alerts) */
+  --brand-900: #0C2448;     /* Darkest chart bar, "in progress" arc */
+  --brand-800: #143D75;     /* Primary buttons, active pill, stat hero card */
+  --brand-700: #1B549E;     /* Nav indicator, logo, live marker */
+  --brand-600: #256EC9;     /* Progress bars, link live status, sparklines */
+  --brand-400: #5B9DEE;     /* Light chart bar, active link badge */
+  --brand-200: #B8D6FB;     /* Soft highlight, selected row */
+  --brand-100: #E2EEFD;     /* Tinted chips, selected nav fill */
+  --brand-50: #F0F6FE;      /* Hover tint, dropzone fill */
+
+  /* Status Colors */
+  --danger: #D7263D;        /* Stop/blocker, overdue, SLA breach */
+  --warning: #E8A317;       /* Pending customer, under negotiation, late */
+  --info: #3B5BDB;          /* Survey assigned, testing, PO received */
+  --todo: #8D9A92;          /* Draft survey, scheduled payout */
+
+  /* Shape & Radii */
+  --radius-card: 20px;
+  --radius-panel: 28px;
+
+  /* Elevation */
+  --shadow-card: 0 1px 2px rgba(17, 20, 18, 0.03);
+  --shadow-lift: 0 18px 40px -12px rgba(17, 20, 18, 0.22);
+  --shadow-hero: 0 12px 28px -10px color-mix(in srgb, var(--brand-900) 55%, transparent);
+}
+
+/* Accent 2 — Fiber Emerald */
+[data-theme="emerald"] {
+  --brand-950: #072013;
+  --brand-900: #0D3A23;
+  --brand-800: #145534;
+  --brand-700: #1D7347;
+  --brand-600: #27865A;
+  --brand-400: #5DBD8B;
+  --brand-200: #BFE3CE;
+  --brand-100: #E3F2E9;
+  --brand-50: #F0F8F3;
+}
+
+/* Accent 3 — Carrier Amber */
+[data-theme="amber"] {
+  --brand-950: #261304;
+  --brand-900: #422006;
+  --brand-800: #663207;
+  --brand-700: #8C450A;
+  --brand-600: #B85B0D;
+  --brand-400: #E88A3C;
+  --brand-200: #F7CEAC;
+  --brand-100: #FDEEE3;
+  --brand-50: #FEF8F4;
+}
+
+/* Accent 4 — NOC Titanium Console */
+[data-theme="titanium"] {
+  --brand-950: #0C0E10;
+  --brand-900: #16191D;
+  --brand-800: #23272E;
+  --brand-700: #333A44;
+  --brand-600: #4A5462;
+  --brand-400: #7E8B9B;
+  --brand-200: #C6CDD5;
+  --brand-100: #E5E8EB;
+  --brand-50: #F3F4F6;
+}
+
+/* Expose tokens as Tailwind utilities: bg-card, text-ink, bg-brand-800, etc. */
+@theme inline {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+
+  --color-canvas: var(--canvas);
+  --color-panel: var(--panel);
+  --color-card: var(--card);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+
+  --color-brand-950: var(--brand-950);
+  --color-brand-900: var(--brand-900);
+  --color-brand-800: var(--brand-800);
+  --color-brand-700: var(--brand-700);
+  --color-brand-600: var(--brand-600);
+  --color-brand-400: var(--brand-400);
+  --color-brand-200: var(--brand-200);
+  --color-brand-100: var(--brand-100);
+  --color-brand-50: var(--brand-50);
+
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-todo: var(--todo);
+
+  --radius-card: var(--radius-card);
+  --radius-panel: var(--radius-panel);
+
+  --shadow-card: var(--shadow-card);
+  --shadow-lift: var(--shadow-lift);
+  --shadow-hero: var(--shadow-hero);
+}
+
+/* Shared Classes */
+.btn-primary {
+  background: linear-gradient(180deg, var(--brand-800) 0%, var(--brand-900) 100%);
+  color: #FFFFFF;
+}
+.btn-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, var(--brand-700) 0%, var(--brand-800) 100%);
+}
+
+.surface-hero {
+  background: linear-gradient(160deg, var(--brand-800) 0%, var(--brand-900) 100%);
+  position: relative;
+  overflow: hidden;
+}
+.surface-hero::after {
+  content: '';
+  position: absolute;
+  right: -20px;
+  bottom: -20px;
+  width: 140px;
+  height: 140px;
+  background: radial-gradient(circle, var(--brand-600) 0%, transparent 70%);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* Diagonal Hatching for uncommitted budgets, pending cycles */
+.hatch {
+  background-color: var(--card);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    #8E9A93 0 1.6px,
+    transparent 1.6px 7px
+  );
+  border: 1px dashed #C9CFCB;
+}
+
+/* Tabular numbers for financial counts & counters */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Smooth Accent Transition */
+html.theme-transition * {
+  transition: background-color 0.4s ease, border-color 0.4s ease, color 0.4s ease !important;
+}
