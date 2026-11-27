@@ -1,8 +1,9 @@
 // ISP-Flow — build and deploy on the VPS with Docker Compose.
 //
 // One-time Jenkins setup:
-//   1. Manage Jenkins > Credentials > add a "Secret file" with ID  isp-flow-env
-//      (your filled-in copy of .env.docker.example).
+//   1. On the VPS, put your filled-in copy of .env.docker.example at /opt/isp-flow/.env
+//      and let Jenkins read it:
+//        sudo chown root:jenkins /opt/isp-flow/.env && sudo chmod 640 /opt/isp-flow/.env
 //   2. The Jenkins agent must run on the VPS and be able to use `docker compose`
 //      (e.g. the jenkins user is in the "docker" group).
 //
@@ -19,6 +20,7 @@ pipeline {
   }
 
   environment {
+    ENV_FILE = '/opt/isp-flow/.env'    // production secrets, kept on the VPS (not in git)
     COMPOSE_PROJECT_NAME = 'isp-flow'
     WEB_PORT = '2000'
   }
@@ -32,9 +34,15 @@ pipeline {
 
     stage('Prepare .env') {
       steps {
-        withCredentials([file(credentialsId: 'isp-flow-env', variable: 'ENV_FILE')]) {
-          sh 'cp "$ENV_FILE" .env && chmod 600 .env'
-        }
+        sh '''
+          if [ ! -r "$ENV_FILE" ]; then
+            echo "ERROR: $ENV_FILE is missing or not readable by user $(whoami)."
+            echo "Create it from .env.docker.example and run:"
+            echo "  sudo chown root:jenkins $ENV_FILE && sudo chmod 640 $ENV_FILE"
+            exit 1
+          fi
+          cp "$ENV_FILE" .env && chmod 600 .env
+        '''
       }
     }
 
